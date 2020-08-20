@@ -8,7 +8,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-<h2 align = "center" style = "color:pink"><i><b>Gender GAP "STEM" degrees</b></i></h2>
+Gender GAP "STEM" degrees
 
 The purpose of this document, is to show the existing gender gap in the italian degrees being parts of the so called <b>"Science, Technology, Engineering and Mathematics"</b> group; the dataset was downloaded from the official <i><u>Dati Ustat</u></i> website: <http://dati.ustat.miur.it/dataset/> <br>
 The selected dataset contains the number of gruadates in the time period 2012-2018 divided by degree type, level of instruction (Bachelor, Master), university and gender.
