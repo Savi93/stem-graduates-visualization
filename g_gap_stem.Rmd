@@ -1,0 +1,342 @@
+---
+title: "Savev David 14057"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+<html>
+<body style = "background-color:white;width: 100%;height: 100%;">
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<h2 align = "center" style = "color:pink"><i><b>Gender GAP "STEM" degrees</b></i></h2>
+
+The purpose of this document, is to show the existing gender gap in the italian degrees being parts of the so called <b>"Science, Technology, Engineering and Mathematics"</b> group; the dataset was downloaded from the official <i><u>Dati Ustat</u></i> website: <http://dati.ustat.miur.it/dataset/> <br>
+The selected dataset contains the number of gruadates in the time period 2012-2018 divided by degree type, level of instruction (Bachelor, Master), university and gender.
+
+<h3 align = "center"><i>Data pre-processing</i></h3>
+Since the dataset uses ";" character as delimiter (the "," is used as punctuation character), read_csv2 is the most suitable command in order to read in an appropriate way the file.
+
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+library(packrat)
+library(tidyverse)
+library(ggthemes)
+library(rnaturalearth)
+library(sf)
+
+options(scipen = 999)
+
+df <- read_csv2("serie_laureati.csv")
+df
+```
+
+After a first pre-processing of the .csv file (renaming of entries and columns names with suitable names), dropping off unesuful columns and deleting rows containing NA entries, the dataframe results in a tidy version, in the following way:
+
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+df <- df %>%
+  drop_na() %>%
+  rename(
+    Year = ANNO,
+    University = AteneoNOME,
+    Region = AteneoREGIONE,
+    GeoArea = AteneoAREAGEO,
+    EducationLevel = CorsoTIPO,
+    Degree = DESC_FoET2013,
+    Gender = Genere,
+    Number =  LAU
+    ) %>%
+  select(Year, University, Region, GeoArea, EducationLevel, Degree, Gender, Number) %>%
+  mutate(EducationLevel = if_else(EducationLevel == "Laurea", "Bachelor", EducationLevel),
+         EducationLevel = if_else(EducationLevel == "Laurea Magistrale", "Master", EducationLevel),
+         EducationLevel = if_else(EducationLevel == "Laurea Magistrale Ciclo Unico", "Single Cycle Master", EducationLevel),
+         EducationLevel = if_else(EducationLevel == "Vecchio Ordinamento", "Old System", EducationLevel)) %>%
+   mutate(GeoArea = if_else(GeoArea == "NORD-EST", "North-East", GeoArea),
+          GeoArea = if_else(GeoArea == "NORD-OVEST", "North-West", GeoArea),
+          GeoArea = if_else(GeoArea == "CENTRO", "Center", GeoArea),
+          GeoArea = if_else(GeoArea == "ISOLE", "Islands", GeoArea),
+          GeoArea = if_else(GeoArea == "SUD", "South", GeoArea))
+
+df
+
+tot_graduates_year <- function(df, year) {
+  val <- df %>%
+  filter(Year == year) %>%
+  summarise(Number = sum(Number)) %>%
+  select(Number) %>%
+  as.double()
+  
+  return(val)
+}
+
+sex_graduates_year <- function(df, sex, year) {
+  val <- df %>%
+  group_by(Gender) %>%
+  filter(Year == year) %>%
+  select(Gender, Number)%>%
+  summarise(Number = sum(Number)) %>%
+  filter(Gender == sex) %>%
+  select(Number) %>%
+  as.double()
+  
+  return(val)
+}
+
+stem_graduates_year <- function(df, sex, year) {
+  val <- df %>%
+  group_by(Gender) %>%
+    filter(Year == year, Degree == 'Natural sciences, mathematics and statistics' | 
+           Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  summarise(Number = sum(Number)) %>%
+  filter(Gender == sex) %>%
+  select(Number) %>%
+  as.double()
+  
+  return(val)
+}
+
+stem_perc_year <- function(df, sex, year) {
+  val <- df %>%
+  group_by(Gender) %>%
+    filter(Year == year, Degree == 'Natural sciences, mathematics and statistics' | 
+           Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  summarise(Number = sum(Number)) %>%
+  mutate(perc = round(Number / sum(Number) * 100, digits=3)) %>%
+  filter(Gender == sex) %>%
+  select(perc) %>%
+  as.double()
+  
+  return(val)
+}
+
+pink_palette <- function() {
+  pal <- c("#FFD1DC","#FFC0CB","#FC8EAC","#DE5D83","#E30B5D","#C32148","#560319")
+  return(pal)
+}
+
+```
+
+<h3 align = "center"><i>Data Visualization</i></h3>
+In year 2018, the total number of italian graduates was: <b>`r tot_graduates_year(df, 2018)`</b>, where <b>`r sex_graduates_year(df, "M", 2018)`</b> male and <b>`r sex_graduates_year(df, "F", 2018)`</b> female; that means that the ratio male-female could be reppresented by the following piechart:
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+
+df %>%
+  group_by(Gender) %>%
+  filter(Year == 2018) %>%
+  summarise(Number = sum(Number)) %>%
+  select(Gender, Number) %>%
+  mutate(perc = round(Number / sum(Number) * 100, digits = 2)) %>%
+  arrange(perc) %>%
+  ggplot(aes(x = "", y=perc, fill=Gender)) + 
+  geom_bar(width = 1, stat = "identity", color="white") +
+  coord_polar("y",start=0) + 
+  theme_minimal() + 
+  geom_text(aes(y = perc/2 + c(0, cumsum(perc)[-length(perc)]), 
+            label = paste0(perc, "%")), size=5, color = "white") + 
+  guides(fill = guide_legend(title = "Gender"))  + 
+  scale_fill_manual(values = c("F" = "#E75480", "M" = "Blue")) +
+  theme_wsj(base_size=10)+ 
+  scale_colour_wsj("colors6") +
+  labs(title = "Graduates gender '18")
+```
+</p>
+
+The degree type of the graduates in year 2018 is shown through the following bar-chart and is also ordered in descending order: 
+<p align = "center">
+
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+df %>%
+  group_by(Degree) %>%
+  filter(Year == 2018) %>%
+  select(Degree, Number, Gender) %>%
+  summarise(Number = sum(Number)) %>%
+  na.omit() %>%
+  mutate(perc = Number / sum(Number)) %>%
+  ggplot(aes(y=Number, x = reorder(Degree, Number), fill = Degree)) + 
+  theme(axis.text.x=element_text(angle = -45, hjust = 0))  +
+  geom_bar(stat = 'identity') + 
+  scale_y_continuous(breaks = (1000 * c(10,25,40,55,70))) +
+  coord_flip() +  
+  theme_wsj(base_size=10) +
+  scale_colour_wsj("colors6") + 
+  ggtitle("Degree type") + 
+  theme(legend.position = "none") +
+  theme(axis.title=element_text(size=12)) + 
+  labs(x = "Degree", y = "Number", title = "Degrees '18")
+```
+</p>
+
+For what concerns the STEM disciplines, We can recognize that they were grouped inside the dataset in three main sectors:
+<b><ul>
+  <li>Engineering, Manufactoring and Construction;</li>
+  <li>Natural Sciences, Math and Statistics;</li>
+  <li>ICTs;</li>
+</ul></b>
+
+Although the total number of female graduates is bigger, the amount of female gruaduates in the "S.T.E.M." disciplines in year 2018 is pretty small, since from a total of <b>`r stem_graduates_year(df, "M", 2018) + stem_graduates_year(df, "F", 2018)`</b>, only <b>`r stem_graduates_year(df, "F", 2018)`</b> are female:
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+df %>%
+  group_by(Gender) %>%
+    filter(Year == 2018, 
+           Degree == 'Natural sciences, mathematics and statistics' | 
+             Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  summarise(Number = sum(Number)) %>%
+  select(Gender, Number) %>%
+  mutate(perc = round(Number / sum(Number) * 100, digits = 2)) %>%
+  arrange(-perc) %>%
+  ggplot(aes(x="", y=perc, fill=Gender)) + 
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) + 
+  geom_text(aes(y = perc/2 + c(0, cumsum(perc)[-length(perc)]), 
+            label = paste0(perc, "%")), size=5, color = "white") + 
+  guides(fill = guide_legend(title = "Gender")) +
+  scale_fill_manual(values = c("F" = "#E75480", "M" = "Blue")) +
+  theme_wsj()+ scale_colour_wsj("colors6") + 
+  labs(title = "STEM gender '18")
+```
+</p>
+
+By plotting the number of STEM graduates by gender, We can clearly recognize were the quantitive gap male-female actually resides:
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+df %>%
+  group_by(Degree, Gender) %>%
+  filter(Year == 2018, Degree == 'Natural sciences, mathematics and statistics' | 
+           Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  select(Degree, Number, Gender) %>%
+  summarise(Number = sum(Number)) %>%
+  mutate(perc = round(Number / sum(Number), digits = 2)) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(Degree = if_else(Degree == "Natural sciences, mathematics and statistics", "N. Sciences, Math, Stat.", Degree),
+         Degree = if_else(Degree == "Engineering, manufacturing and construction", "Engin., Manuf., constr.", Degree),
+         Degree = if_else(Degree == "Information and Communication Technologies (ICTs)", "ICTs", Degree)) %>%
+  ggplot(aes(y=perc, x = Degree, fill = Gender))  +
+  geom_col(position='dodge') + 
+  scale_fill_manual(values = c("F" = "#E75480", "M" = "Blue")) + 
+  theme_wsj(base_size=8)+ 
+  scale_y_continuous(breaks = c(0.10,0.20,0.30,0.40,0.5,0.6,0.7,0.8), labels = scales::percent) +
+  scale_colour_wsj("colors6") +
+  theme(axis.text.x=element_text(angle = -20, hjust = 0)) + 
+  ggtitle("Sex STEM '18") + 
+  theme(axis.title=element_text(size=12)) + 
+  labs(x = "Degree", y = "Percentage %", title = "STEM Sex '18")
+```
+</p>
+
+By following the trend of the number of female gruaduates in STEM disciplines from 2012 till 2018, We can see that the percentage has slightly dropped from <b>`r stem_perc_year(df, "F", 2012)`%</b> to <b>`r stem_perc_year(df, "F", 2018)`%</b> as it can be denoticed from the following linechart:
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+df %>%
+  group_by(Year, Gender) %>%
+  filter(Degree == 'Natural sciences, mathematics and statistics' | 
+           Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  select(Gender, Number, Year) %>%
+  summarise(Number = sum(Number)) %>%
+  mutate(perc = Number / sum(Number)) %>%
+  ggplot(aes(x = Year, y = perc, color = Gender)) + 
+  geom_line() +
+  geom_point() +
+  scale_fill_manual(values = c("F" = "#E75480", "M" = "Blue")) +  
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.1))  +
+  scale_x_continuous(breaks = c(2012,2013,2014,2015,2016,2017,2018)) +
+  theme_wsj(base_size=10) + 
+  scale_colour_wsj("colors6") + 
+  theme(axis.title=element_text(size=12)) + 
+  labs(x = "Year", y = "Percentage %", title = "STEM gap '12-'18")
+```
+</p>
+
+By analyzing the STEM gender gap in the last years, We can recognize a specific pattern that manifests itself every year: <i><b>Northern Italy has the smallest percentage of female graduates in whole Italy.</b></i>.
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+df %>%
+  mutate(GeoArea = if_else(GeoArea == "North-West" | GeoArea == "North-East" , "North", GeoArea)) %>%
+  group_by(GeoArea, Year, Gender) %>%
+  filter(Degree == 'Natural sciences, mathematics and statistics' | 
+           Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  summarise(Number = sum(Number)) %>%
+  mutate(perc = Number / sum(Number)) %>%
+  ungroup() %>%
+  group_by(GeoArea) %>%
+  mutate(total = sum(Number)) %>%
+  filter(Gender == "F") %>%
+  ggplot(aes(x=GeoArea, y=perc)) +
+  geom_col(fill="#E75480") + 
+  coord_flip() + 
+  scale_y_continuous(breaks = c(0, 0.05,0.10,0.15,0.20,0.25,0.30,0.35,0.40,0.45), labels = scales::percent) +
+  facet_grid(Year~.) + 
+  theme_wsj() + 
+  scale_colour_wsj("colors6") + 
+  theme(axis.title=element_text(size=12)) + 
+  labs(x = "Area", y = "Percentage %", title = "Female STEM '12-'18")
+```
+</p>
+
+Since among the period 2012-2018 We have a similar pattern (Northern Italy with the smallest percentages, Southern or Center Italy usually with the highest), We could plot the mean of female STEM graduates ordered by region in the last 6 years (2012-2018):
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+
+df <- df %>%
+  group_by(Region, Gender) %>%
+  filter(Degree == 'Natural sciences, mathematics and statistics' | 
+           Degree == 'Engineering, manufacturing and construction' | 
+             Degree == 'Information and Communication Technologies (ICTs)') %>%
+  summarise(Number = sum(Number)) %>%
+  mutate(perc = Number / sum(Number)) %>%
+  filter(Gender == "F")
+
+df %>%
+  ggplot(aes(y=perc, x = reorder(Region, -perc))) + 
+  geom_col(position='dodge',fill="#E75480") + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) + 
+  theme_wsj(base_size=10)+ 
+  scale_colour_wsj("colors6") +  
+  theme(axis.text.x=element_text(angle = -90, hjust = 0)) + 
+  theme(axis.title=element_text(size=12)) + 
+  labs(x = "Region", y = "Percentage %", title = "Regions '12-'18")
+```
+</p>
+
+By the way, mapping the previous barchart to an italian map, could be hovewer more expressive (Valle d'Aosta has no relevant data since there are no "STEM" faculties):
+
+<p align = "center">
+```{r,echo = FALSE, message= FALSE, warning=FALSE}
+italy <- read_sf("ne_10m_admin_1_states_provinces.shp")
+  
+italy <- italy %>%
+  filter(admin == "Italy") %>%
+  mutate(region = if_else(region == "Sicily", "Sicilia", region),
+         region = if_else(region == "Apulia", "Puglia", region)) %>%
+  group_by(region) %>%
+  summarise()
+
+res <- left_join(x = italy, y=df, by = c("region" = "Region"))
+
+res %>% 
+  ggplot() + 
+  geom_sf(aes(fill= perc * 100), color = "white") + 
+  scale_fill_gradientn(colors=pink_palette()) + 
+  theme_wsj() + 
+  scale_colour_wsj("colors6") + 
+  labs(fill = "%")
+
+```
+</p>
+</body>
+</html>
